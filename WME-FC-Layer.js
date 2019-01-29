@@ -314,7 +314,7 @@
         KS: {
             baseUrl: 'http://wfs.ksdot.org/arcgis_web_adaptor/rest/services/Transportation/',
             supportsPagination: false,
-            defaultColors: {Fw:'#ff00c5',Ew:'#ff00c5',MH:'#149ece',mH:'#4ce600',PS:'#cfae0e',St:'#eeeeee'},
+            defaultColors: {Fw:'#ff00c5',Ew:'#149ece',MH:'#149ece',mH:'#4ce600',PS:'#cfae0e',St:'#eeeeee'},
             zoomSettings: { maxOffset: [30,15,8,4,2,1,1,1,1,1] },
             fcMapLayers: [
                 { layerID:0, layerPath:'Non_State_System/MapServer/', idPropName:'ID2', fcPropName:'FUNCLASS', outFields:['FUNCLASS','ID2','ROUTE_ID'],
