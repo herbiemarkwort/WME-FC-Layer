@@ -28,6 +28,7 @@
 // @connect      nd.gov
 // @connect      pa.gov
 // @connect      oh.us
+// @connect      iowadot.gov
 // @connect      ksdot.org
 // @connect      ky.gov
 // @connect      shelbycountytn.gov
@@ -282,6 +283,34 @@
                 }
             }
         },
+        IA: {
+            baseUrl: 'https://gis.iowadot.gov/public/rest/services/RAMS/Road_Network/MapServer/',
+            supportsPagination: false,
+            defaultColors: {Fw:'#ff00c5',Ew:'#149ece',MH:'#149ece',mH:'#4ce600',PS:'#cfae0e',St:'#eeeeee',PSGr:'#8f5f00',StGr:'#837870'},
+            zoomSettings: { maxOffset: [30,15,8,4,2,1,1,1,1,1], excludeRoadTypes: [[],[],[],[],[],[],[],[],[],[],[]] },
+            fetchAllFC: false,
+            fcMapLayers: [
+                { layerID:0, fcPropName:'FED_FUNCTIONAL_CLASS', idPropName:'OBJECTID', outFields:['OBJECTID', 'FED_FUNCTIONAL_CLASS', 'STATE_ROUTE_NAME_1', 'ACCESS_CONTROL', 'SURFACE_TYPE'], maxRecordCount:1000, supportsPagination:false,
+                 roadTypeMap:{Fw:["1"],MH:["2","3"],mH:["4"],PS:["5","6"],St:["7"]} }
+            ],
+            getWhereClause: function(context) {
+                var theclause = "FACILITY_TYPE<>'7'";
+                if(context.mapContext.zoom < 4) { theclause += " AND " + context.layer.fcPropName + "<>'7'"; }
+                return theclause;
+            },
+            getFeatureRoadType: function(feature, layer) {
+                var attr = feature.attributes;
+                var fcName = layer.fcPropName;
+                var fc = parseInt(attr[fcName]);
+                var isFw = attr.ACCESS_CONTROL === 1;
+                var isUS = RegExp('STATE OF IOWA, US').test(attr.STATE_ROUTE_NAME_1);
+                var isState = RegExp('STATE OF IOWA, IA').test(attr.STATE_ROUTE_NAME_1);
+                fc = isFw ? 1 : ((fc > 3 && isUS) ? Math.min(fc,3) : ((fc > 4 && isState) ? Math.min(fc,4) : fc));
+                var roadType = fc === 1 ? 'Fw' : (fc === 2 ? 'MH' : (fc === 3 ? 'MH' : (fc === 4 ? 'mH' : (fc <= 6 ? 'PS' : 'St'))));
+                if (fc > 4 && attr.SURFACE_TYPE === 20) { roadType = roadType === 'PS' ? 'PSGr' : 'StGr' ; }
+                return roadType;
+            }
+        },
         KS: {
             baseUrl: 'http://wfs.ksdot.org/arcgis_web_adaptor/rest/services/Transportation/',
             supportsPagination: false,
@@ -325,7 +354,6 @@
                     fc = (isBusiness ? Math.min(fc, 3) : 1 );
                 }
                 var roadType = fc === 1 ? 'Fw' : (fc === 2 ? 'MH' : (fc === 3 ? 'MH' : (fc === 4 ? 'mH' : (fc <= 6 ? 'PS' : 'St'))));
-                console.log([roadPrefix, fc, attr.ACCESS_CONTROL, attr.ADMO, attr.INTERSTATE_ROUTES,attr.US_ROUTES,attr.STATE_ROUTES].join('/'));
                 return roadType;
             },
         },
@@ -440,6 +468,52 @@
                 }
             }
         },
+        NV: {
+            baseUrl: 'https://gis.nevadadot.com/arcgis/rest/services/ArcGISOnline/PublicMaintenanceMap/MapServer/',
+            defaultColors: {Fw:'#ff00c5',Ew:'#149ece',MH:'#149ece',mH:'#4ce600',PS:'#cfae0e',St:'#eeeeee'},
+            zoomSettings: { maxOffset: [30,15,8,4,2,1,1,1,1,1], excludeRoadTypes: [['St'],['St'],['St'],['St'],[],[],[],[],[],[],[]] },
+            fcMapLayers: [
+                { layerID:3, fcPropName:'FUNC_CODE', idPropName:'OBJECTID', outFields:['OBJECTID','FUNC_CODE'], roadTypeMap:{Fw:[1],Ew:[2],MH:[3],mH:[4],PS:[5,6],St:[7]}, maxRecordCount:1000, supportsPagination:false }
+            ],
+            getWhereClause: function(context) {
+                return null;
+            },
+            getFeatureRoadType: function(feature, layer) {
+                return _stateSettings.global.getFeatureRoadType(feature, layer);
+            }
+        },
+        NY: {//https://gis3.dot.ny.gov/arcgis/rest/services/Basemap/MapServer/21
+            baseUrl: 'https://gis3.dot.ny.gov/arcgis/rest/services/',
+            defaultColors: {Fw:'#ff00c5',Ew:'#5f33df',MH:'#149ece',mH:'#4ce600',PS:'#cfae0e',St:'#eeeeee'},
+            zoomSettings: { maxOffset: [30,15,8,4,2,1,1,1,1,1] },
+            fcMapLayers: [
+                { layerID:'FC/MapServer/1', fcPropName:'FUNC_CLASS', idPropName:'OBJECTID', outFields:['OBJECTID','FUNC_CLASS','SEGMENT_NAME','ROUTE_NO'], roadTypeMap:{Fw:[1,11],Ew:[2,12],MH:[4,14],mH:[6,16],PS:[7,8,17,18]},
+                 maxRecordCount:1000, supportsPagination:false },
+                { layerID:'Basemap/MapServer/21', idPropName:'OBJECTID', outFields:['OBJECTID','SHIELD'], maxRecordCount:1000, supportsPagination:false }
+            ],
+            getWhereClause: function(context) {
+                if (context.layer.layerID === 'Basemap/MapServer/21') {
+                    return ("SHIELD IN ('C','CT')");
+                } else {
+                    return null;
+                }
+            },
+            getFeatureRoadType: function(feature, layer) {
+                var roadType;
+                if (layer.layerID === 'Basemap/MapServer/21') {
+                    roadType = 'PS';
+                } else {
+                    roadType = _stateSettings.global.getFeatureRoadType(feature, layer);
+                    var routeNo = feature.attributes.ROUTE_NO;
+                    if (/^NY.*/.test(routeNo)) {
+                        if (roadType === 'PS') roadType = 'mH';
+                    } else if (/^US.*/.test(routeNo)) {
+                        if (roadType === 'PS' || roadType === 'mH') roadType = 'MH';
+                    }
+                }
+                return roadType;
+            }
+        },
         NC: {
             baseUrl: 'https://gis11.services.ncdot.gov/arcgis/rest/services/NCDOT_FunctionalClass/MapServer/',
             defaultColors: {Fw:'#ff00c5',Rmp:'#999999',Ew:'#5f33df',MH:'#149ece',mH:'#4ce600',PS:'#cfae0e',St:'#eeeeee'},
@@ -527,52 +601,6 @@
             },
             getFeatureRoadType: function(feature, layer) {
                 return _stateSettings.global.getFeatureRoadType(feature, layer);
-            }
-        },
-        NV: {
-            baseUrl: 'https://gis.nevadadot.com/arcgis/rest/services/ArcGISOnline/PublicMaintenanceMap/MapServer/',
-            defaultColors: {Fw:'#ff00c5',Ew:'#149ece',MH:'#149ece',mH:'#4ce600',PS:'#cfae0e',St:'#eeeeee'},
-            zoomSettings: { maxOffset: [30,15,8,4,2,1,1,1,1,1], excludeRoadTypes: [['St'],['St'],['St'],['St'],[],[],[],[],[],[],[]] },
-            fcMapLayers: [
-                { layerID:3, fcPropName:'FUNC_CODE', idPropName:'OBJECTID', outFields:['OBJECTID','FUNC_CODE'], roadTypeMap:{Fw:[1],Ew:[2],MH:[3],mH:[4],PS:[5,6],St:[7]}, maxRecordCount:1000, supportsPagination:false }
-            ],
-            getWhereClause: function(context) {
-                return null;
-            },
-            getFeatureRoadType: function(feature, layer) {
-                return _stateSettings.global.getFeatureRoadType(feature, layer);
-            }
-        },
-        NY: {//https://gis3.dot.ny.gov/arcgis/rest/services/Basemap/MapServer/21
-            baseUrl: 'https://gis3.dot.ny.gov/arcgis/rest/services/',
-            defaultColors: {Fw:'#ff00c5',Ew:'#5f33df',MH:'#149ece',mH:'#4ce600',PS:'#cfae0e',St:'#eeeeee'},
-            zoomSettings: { maxOffset: [30,15,8,4,2,1,1,1,1,1] },
-            fcMapLayers: [
-                { layerID:'FC/MapServer/1', fcPropName:'FUNC_CLASS', idPropName:'OBJECTID', outFields:['OBJECTID','FUNC_CLASS','SEGMENT_NAME','ROUTE_NO'], roadTypeMap:{Fw:[1,11],Ew:[2,12],MH:[4,14],mH:[6,16],PS:[7,8,17,18]},
-                 maxRecordCount:1000, supportsPagination:false },
-                { layerID:'Basemap/MapServer/21', idPropName:'OBJECTID', outFields:['OBJECTID','SHIELD'], maxRecordCount:1000, supportsPagination:false }
-            ],
-            getWhereClause: function(context) {
-                if (context.layer.layerID === 'Basemap/MapServer/21') {
-                    return ("SHIELD IN ('C','CT')");
-                } else {
-                    return null;
-                }
-            },
-            getFeatureRoadType: function(feature, layer) {
-                var roadType;
-                if (layer.layerID === 'Basemap/MapServer/21') {
-                    roadType = 'PS';
-                } else {
-                    roadType = _stateSettings.global.getFeatureRoadType(feature, layer);
-                    var routeNo = feature.attributes.ROUTE_NO;
-                    if (/^NY.*/.test(routeNo)) {
-                        if (roadType === 'PS') roadType = 'mH';
-                    } else if (/^US.*/.test(routeNo)) {
-                        if (roadType === 'PS' || roadType === 'mH') roadType = 'MH';
-                    }
-                }
-                return roadType;
             }
         },
         OH: {
